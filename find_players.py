@@ -1,97 +1,93 @@
 import requests
 import time
+import os
 from urllib.parse import quote_plus
 from datetime import date
 
+# Constants
 BASE_URL = "https://rating.englishchess.org.uk/v2/new/api.php"
 TODAY = date.today().strftime("%Y-%m-%d")
+INPUT_FILE = "players.txt"
 
 
-def search_player_by_name(name: str):
-    """
-    Search for players using the fuzzy name search endpoint:
-    Example: https://rating.englishchess.org.uk/v2/new/api.php?v2/players/fuzzy_name/john+smythe
-    """
-    # Encode name for URL (replace spaces with +)
-    encoded = quote_plus(name)
-    url = f"{BASE_URL}?v2/players/name/{encoded}"
+def get_player_matches(session, name: str):
+    """Search for players by name and return a list of matches."""
+    encoded_name = quote_plus(name)
+    url = f"{BASE_URL}?v2/players/name/{encoded_name}"
 
-    response = requests.get(url)
-    if not response.ok:
-        print(f"Failed to search name '{name}' (status {response.status_code})")
+    try:
+        response = session.get(url)
+        response.raise_for_status()
+        data = response.json()
+        # The API can return a dict with a "players" key or a direct list
+        return data.get("players") if isinstance(data, dict) else data
+    except Exception as e:
+        print(f"  [!] Error searching for '{name}': {e}")
         return []
 
-    data = response.json()
-    # Expect a list of player objects
-    return data.get("players") or data
 
-
-def get_player_info_by_code(code: str):
-    """
-    Get a player's detailed info by their ECF code.
-    Example: https://rating.englishchess.org.uk/v2/new/api.php?v2/players/code/120787
-    """
-    # Some codes include trailing letters (e.g., 120787J) — include whole code.
-    url = f"{BASE_URL}?v2/players/code/{quote_plus(code)}"
-
-    response = requests.get(url)
-    if not response.ok:
-        print(f"Failed to get info for code '{code}' (status {response.status_code})")
-        return None
-
-    return response.json()
-
-
-def get_player_rating_by_code(code: str):
+def get_player_rating(session, code: str):
+    """Fetch the revised rating for a specific ECF code."""
     url = f"{BASE_URL}?v2/ratings/R/{quote_plus(code)}/{TODAY}"
 
-    response = requests.get(url)
-    if not response.ok:
-        # print(f"Failed to get info for code '{code}' (status {response.status_code})")
-        return None
-
-    return response.json()
+    try:
+        response = session.get(url)
+        if response.status_code == 200:
+            return response.json().get("revised_rating", 0)
+    except Exception:
+        pass
+    return 0
 
 
 def main():
-    # Get a list of names from the user
-    names_input = input("Enter player names separated by semicolons: ")
-    names = [n.strip() for n in names_input.split(";") if n.strip()]
+    if not os.path.exists(INPUT_FILE):
+        print(
+            f"Error: '{INPUT_FILE}' not found. Please create it with one name per line."
+        )
+        return
 
-    print("\n=== ECF Rating Results ===")
+    # Read names from file
+    with open(INPUT_FILE, "r") as f:
+        names = [line.strip() for line in f if line.strip()]
 
-    player_ratings = []
-    for name in names:
-        matches = search_player_by_name(name)
+    if not names:
+        print("The input file is empty.")
+        return
 
-        if not matches:
-            print("  No matches found for name:", name)
-            player_ratings.append((name, 0))
-            continue
+    print(f"Found {len(names)} names in {INPUT_FILE}. Fetching ratings...\n")
 
-        # Handle multiple matches
-        for match in matches:
-            # Each match should contain at least a name and a code
-            player_name = match.get("name") or match.get("full_name") or "<unknown>"
-            player_code = (
-                match.get("code") or match.get("ECF_code") or match.get("ref") or None
-            )
+    results = []
 
-            if player_code:
-                info = get_player_rating_by_code(player_code)
-                if info:
-                    player_ratings.append((player_name, info.get("revised_rating")))
-                else:
-                    player_ratings.append((player_name, 0))
-            else:
-                print("    No code available.")
+    # Use a Session for connection pooling (faster)
+    with requests.Session() as session:
+        for name in names:
+            matches = get_player_matches(session, name)
 
-            # Be polite / avoid overloading the API (there are limits per day)
-            time.sleep(0.2)
+            if not matches:
+                print(f"  [-] No matches found for: {name}")
+                continue
 
-    player_ratings = sorted(player_ratings, key=lambda x: x[1], reverse=True)
-    for player in player_ratings:
-        print(player[0] + ": " + str(player[1]))
+            for match in matches:
+                p_name = match.get("full_name") or match.get("name") or "Unknown"
+                p_code = match.get("code") or match.get("ECF_code") or match.get("ref")
+
+                if p_code:
+                    rating = get_player_rating(session, p_code)
+                    results.append({"name": p_name, "rating": rating or 0})
+
+                # API Rate Limiting safety
+                time.sleep(0.1)
+
+    # Sort by rating (descending)
+    results.sort(key=lambda x: x["rating"], reverse=True)
+
+    # Display results
+    print("\n" + "=" * 30)
+    print(f"{'PLAYER NAME':<22} | {'RATING'}")
+    print("-" * 30)
+    for entry in results:
+        print(f"{entry['name'][:22]:<22} | {entry['rating']}")
+    print("=" * 30)
 
 
 if __name__ == "__main__":
