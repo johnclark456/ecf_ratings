@@ -65,6 +65,7 @@ def main():
 
             if not matches:
                 print(f"  [-] No matches found for: {name}")
+                results.append({"name": name, "rating": 0})
                 continue
 
             for match in matches:
@@ -92,3 +93,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
