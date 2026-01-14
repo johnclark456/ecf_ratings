@@ -8,6 +8,7 @@ from datetime import date
 BASE_URL = "https://rating.englishchess.org.uk/v2/new/api.php"
 TODAY = date.today().strftime("%Y-%m-%d")
 INPUT_FILE = "players.txt"
+VERBOSE = False
 
 
 def get_player_matches(session, name: str):
@@ -22,7 +23,8 @@ def get_player_matches(session, name: str):
         # The API can return a dict with a "players" key or a direct list
         return data.get("players") if isinstance(data, dict) else data
     except Exception as e:
-        print(f"  [!] Error searching for '{name}': {e}")
+        if VERBOSE:
+            print(f"  [!] Error searching for '{name}': {e}")
         return []
 
 
@@ -93,4 +95,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
