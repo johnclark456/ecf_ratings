@@ -70,16 +70,16 @@ def main():
                 results.append({"name": name, "rating": 0})
                 continue
 
-            for match in matches:
-                p_name = match.get("full_name") or match.get("name") or "Unknown"
-                p_code = match.get("code") or match.get("ECF_code") or match.get("ref")
+            match = matches[0]  # Take the first match
+            p_name = match.get("full_name") or match.get("name") or "Unknown"
+            p_code = match.get("code") or match.get("ECF_code") or match.get("ref")
 
-                if p_code:
-                    rating = get_player_rating(session, p_code)
-                    results.append({"name": p_name, "rating": rating or 0})
+            if p_code:
+                rating = get_player_rating(session, p_code)
+                results.append({"name": p_name, "rating": rating or 0})
 
-                # API Rate Limiting safety
-                time.sleep(0.1)
+            # API Rate Limiting safety
+            time.sleep(0.1)
 
     # Sort by rating (descending)
     results.sort(key=lambda x: x["rating"], reverse=True)
@@ -95,3 +95,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
