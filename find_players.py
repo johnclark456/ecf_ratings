@@ -41,6 +41,42 @@ def get_player_rating(session, code: str):
     return 0
 
 
+def get_ratings_for_names(names):
+    """
+    Given a list of names, fetch their ratings.
+    Returns a list of dicts: {'name': str, 'rating': int}
+    """
+    results = []
+    # Use a Session for connection pooling (faster)
+    with requests.Session() as session:
+        for name in names:
+            name = name.strip()
+            if not name:
+                continue
+                
+            matches = get_player_matches(session, name)
+
+            if not matches:
+                if VERBOSE:
+                   print(f"  [-] No matches found for: {name}")
+                results.append({"name": name, "rating": 0})
+                continue
+
+            match = matches[0]  # Take the first match
+            p_name = match.get("full_name") or match.get("name") or "Unknown"
+            p_code = match.get("code") or match.get("ECF_code") or match.get("ref")
+
+            if p_code:
+                rating = get_player_rating(session, p_code)
+                results.append({"name": p_name, "rating": rating or 0})
+            else:
+                results.append({"name": p_name, "rating": 0})
+
+    # Sort by rating (descending)
+    results.sort(key=lambda x: x["rating"], reverse=True)
+    return results
+
+
 def main():
     if not os.path.exists(INPUT_FILE):
         print(
@@ -58,31 +94,7 @@ def main():
 
     print(f"Found {len(names)} names in {INPUT_FILE}. Fetching ratings...\n")
 
-    results = []
-
-    # Use a Session for connection pooling (faster)
-    with requests.Session() as session:
-        for name in names:
-            matches = get_player_matches(session, name)
-
-            if not matches:
-                print(f"  [-] No matches found for: {name}")
-                results.append({"name": name, "rating": 0})
-                continue
-
-            match = matches[0]  # Take the first match
-            p_name = match.get("full_name") or match.get("name") or "Unknown"
-            p_code = match.get("code") or match.get("ECF_code") or match.get("ref")
-
-            if p_code:
-                rating = get_player_rating(session, p_code)
-                results.append({"name": p_name, "rating": rating or 0})
-
-            # API Rate Limiting safety
-            time.sleep(0.1)
-
-    # Sort by rating (descending)
-    results.sort(key=lambda x: x["rating"], reverse=True)
+    results = get_ratings_for_names(names)
 
     # Display results
     print("\n" + "=" * 30)
@@ -95,4 +107,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
